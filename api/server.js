@@ -1,10 +1,11 @@
 import Hapi from 'hapi';
 
 const server = new Hapi.Server({
-  host: '127.0.0.1',
+  host: '0.0.0.0',
   port: '8080',
   routes: {
     cors: { origin: 'ignore' },
+    payload: { parse: false, output: 'stream' },
   },
 });
 
