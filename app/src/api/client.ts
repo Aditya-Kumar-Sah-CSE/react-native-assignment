@@ -6,9 +6,13 @@ import { NativeModules, Platform } from 'react-native';
 export const DEFAULT_API_URL = 'http://localhost:8080/shifts';
 
 /**
+ * Active local Wi-Fi / Hotspot LAN IP address of development machine
+ */
+export const CURRENT_LAN_API_URL = 'http://10.164.242.247:8080/shifts';
+
+/**
  * Extracts the Metro bundler host IP dynamically from the loaded JavaScript bundle URL.
- * Works seamlessly across ANY local Wi-Fi, mobile hotspot, or office network
- * without requiring hardcoded IP addresses.
+ * Works across local Wi-Fi, mobile hotspot, or office network.
  *
  * Example scriptURL: "http://192.168.1.15:8081/index.bundle?platform=android..."
  */
@@ -17,7 +21,6 @@ export function getDynamicHostIp(): string | null {
   const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
   const host = match ? match[1] : null;
 
-  // Ensure it is a valid non-loopback host
   if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '10.0.2.2') {
     return host;
   }
@@ -28,8 +31,9 @@ export function getDynamicHostIp(): string | null {
  * Returns prioritized candidate API base URLs ordered by reachability:
  * 1. Environment Variable EXPO_PUBLIC_API_URL (if specified in .env)
  * 2. Dynamically extracted Metro Host IP (Physical device on ANY network)
- * 3. Android Emulator loopback alias (10.0.2.2 -> host machine localhost)
- * 4. Localhost (iOS Simulator / Web browser / adb reverse)
+ * 3. Active LAN IP fallback (Physical phone on development hotspot/Wi-Fi)
+ * 4. Android Emulator loopback alias (10.0.2.2 -> host machine port 8080)
+ * 5. Localhost (iOS Simulator / Web browser / adb reverse)
  */
 export function getBaseUrls(): string[] {
   const urls: string[] = [];
@@ -46,12 +50,15 @@ export function getBaseUrls(): string[] {
     urls.push(`http://${dynamicHostIp}:8080/shifts`);
   }
 
-  // 3. Android Emulator loopback alias (maps emulator to host machine port 8080)
+  // 3. Known active development machine LAN/Hotspot IP
+  urls.push(CURRENT_LAN_API_URL);
+
+  // 4. Android Emulator loopback alias (maps emulator to host machine port 8080)
   if (Platform.OS === 'android') {
     urls.push('http://10.0.2.2:8080/shifts');
   }
 
-  // 4. Localhost (standard for iOS Simulator, Web, or adb reverse)
+  // 5. Localhost (standard for iOS Simulator, Web, or adb reverse)
   urls.push(DEFAULT_API_URL);
 
   // Return deduplicated list of valid non-empty URLs
