@@ -1,4 +1,4 @@
-import { getBaseUrls, LAN_API_URL } from './client';
+import { getBaseUrls, DEFAULT_API_URL } from './client';
 import { Shift } from '../types/shift';
 
 /**
@@ -14,7 +14,7 @@ let cachedBaseUrl: string | null = null;
  */
 async function fetchWithFallback(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const baseUrls = getBaseUrls();
-  const validBaseUrls = baseUrls.length > 0 ? baseUrls : [LAN_API_URL];
+  const validBaseUrls = baseUrls.length > 0 ? baseUrls : [DEFAULT_API_URL];
 
   const urlsToTry = cachedBaseUrl && validBaseUrls.includes(cachedBaseUrl)
     ? [cachedBaseUrl, ...validBaseUrls.filter((u) => u !== cachedBaseUrl)]

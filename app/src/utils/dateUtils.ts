@@ -1,46 +1,93 @@
 import { Shift, ShiftSection } from '../types/shift';
 
 /**
- * Format timestamp into 24h time: e.g. "14:00"
+ * Optional default timezone for the application.
+ * All shifts in this assignment are situated in Finnish cities (Helsinki, Tampere, Turku).
+ * Setting to undefined uses the user's device local timezone.
  */
-export const formatTime = (timestamp: number): string => {
-  const d = new Date(timestamp);
-  const hours = d.getHours().toString().padStart(2, '0');
-  const minutes = d.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+export const FINLAND_TIMEZONE = 'Europe/Helsinki';
+
+/**
+ * Format timestamp into 24h time: e.g. "14:00"
+ * Supports optional timezone parameter (e.g. 'Europe/Helsinki' or device local if omitted).
+ */
+export const formatTime = (timestamp: number, timeZone?: string): string => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      ...(timeZone ? { timeZone } : {}),
+    });
+    return formatter.format(new Date(timestamp));
+  } catch {
+    const d = new Date(timestamp);
+    const hours = d.getHours().toString().padStart(2, '0');
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
 };
 
 /**
  * Format shift time range: e.g. "14:00-16:00"
  */
-export const formatShiftTimeRange = (startTime: number, endTime: number): string => {
-  return `${formatTime(startTime)}-${formatTime(endTime)}`;
+export const formatShiftTimeRange = (
+  startTime: number,
+  endTime: number,
+  timeZone?: string
+): string => {
+  return `${formatTime(startTime, timeZone)}-${formatTime(endTime, timeZone)}`;
 };
 
 /**
- * Determine date group label: "Today", "Tomorrow", or "September 22"
+ * Generate a timezone-aligned ISO calendar date key "YYYY-MM-DD"
  */
-export const getDateLabel = (timestamp: number): string => {
-  const target = new Date(timestamp);
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
+export const getDateKey = (timestamp: number, timeZone?: string): string => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...(timeZone ? { timeZone } : {}),
+    });
+    return formatter.format(new Date(timestamp));
+  } catch {
+    const d = new Date(timestamp);
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+};
 
-  const isSameDay = (d1: Date, d2: Date) =>
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate();
+/**
+ * Determine date group label: "Today", "Tomorrow", or formatted date e.g. "November 24".
+ * Accurately aligns calendar boundaries according to the active timezone.
+ */
+export const getDateLabel = (timestamp: number, timeZone?: string): string => {
+  const now = Date.now();
+  const todayKey = getDateKey(now, timeZone);
+  const tomorrowKey = getDateKey(now + 24 * 60 * 60 * 1000, timeZone);
+  const targetKey = getDateKey(timestamp, timeZone);
 
-  if (isSameDay(target, today)) {
+  if (targetKey === todayKey) {
     return 'Today';
-  } else if (isSameDay(target, tomorrow)) {
+  } else if (targetKey === tomorrowKey) {
     return 'Tomorrow';
   } else {
-    // Format: "MMMM d", e.g. "September 22"
-    return target.toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-    });
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        month: 'long',
+        day: 'numeric',
+        ...(timeZone ? { timeZone } : {}),
+      });
+      return formatter.format(new Date(timestamp));
+    } catch {
+      return new Date(timestamp).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+      });
+    }
   }
 };
 
@@ -55,20 +102,22 @@ export const calculateTotalHours = (shifts: Shift[]): number => {
 };
 
 /**
- * Checks if a shift has already started
+ * Checks if a shift has already started (UTC epoch ms comparison)
  */
 export const hasShiftStarted = (shift: Shift): boolean => {
-  return Date.now() > shift.startTime;
+  return Date.now() >= shift.startTime;
 };
 
 /**
  * Group shifts by Date for SectionList.
  * @param shifts Input shift array
  * @param includeSummary If true, appends "X shifts, Y h" to section subtitle (used in My shifts)
+ * @param timeZone Optional timezone for date alignment
  */
 export const groupShiftsByDate = (
   shifts: Shift[],
-  includeSummary: boolean = false
+  includeSummary: boolean = false,
+  timeZone?: string
 ): ShiftSection[] => {
   // Sort shifts chronologically by startTime
   const sorted = [...shifts].sort((a, b) => a.startTime - b.startTime);
@@ -77,9 +126,8 @@ export const groupShiftsByDate = (
   const map = new Map<string, { label: string; shifts: Shift[] }>();
 
   sorted.forEach((shift) => {
-    const d = new Date(shift.startTime);
-    const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-    const label = getDateLabel(shift.startTime);
+    const key = getDateKey(shift.startTime, timeZone);
+    const label = getDateLabel(shift.startTime, timeZone);
 
     if (!map.has(key)) {
       map.set(key, { label, shifts: [] });
@@ -106,4 +154,3 @@ export const groupShiftsByDate = (
 
   return sections;
 };
-

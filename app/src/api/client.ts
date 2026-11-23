@@ -1,52 +1,66 @@
 import { NativeModules, Platform } from 'react-native';
 
 /**
- * Known laptop Wi-Fi / Hotspot LAN IP address
+ * Default fallback API URL (standard localhost)
  */
-export const LAN_API_URL = 'http://10.164.242.247:8080/shifts';
+export const DEFAULT_API_URL = 'http://localhost:8080/shifts';
 
 /**
- * Fallback backward-compatible exports
- */
-export const PRIMARY_URL = LAN_API_URL;
-export const FALLBACK_URL = Platform.select({
-  android: 'http://10.0.2.2:8080/shifts',
-  default: 'http://localhost:8080/shifts',
-});
-
-/**
- * Returns candidate API base URLs ordered by reachability.
+ * Extracts the Metro bundler host IP dynamically from the loaded JavaScript bundle URL.
+ * Works seamlessly across ANY local Wi-Fi, mobile hotspot, or office network
+ * without requiring hardcoded IP addresses.
  *
- * Automatically handles:
- * 1. Physical Device (Metro bundle host IP, e.g. 10.164.242.247)
- * 2. Direct laptop Wi-Fi / Hotspot LAN IP (10.164.242.247)
- * 3. Android Emulator loopback alias (10.0.2.2)
- * 4. Localhost (adb reverse / iOS Simulator / Web)
+ * Example scriptURL: "http://192.168.1.15:8081/index.bundle?platform=android..."
+ */
+export function getDynamicHostIp(): string | null {
+  const scriptURL: string = NativeModules.SourceCode?.scriptURL || '';
+  const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
+  const host = match ? match[1] : null;
+
+  // Ensure it is a valid non-loopback host
+  if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '10.0.2.2') {
+    return host;
+  }
+  return null;
+}
+
+/**
+ * Returns prioritized candidate API base URLs ordered by reachability:
+ * 1. Environment Variable EXPO_PUBLIC_API_URL (if specified in .env)
+ * 2. Dynamically extracted Metro Host IP (Physical device on ANY network)
+ * 3. Android Emulator loopback alias (10.0.2.2 -> host machine localhost)
+ * 4. Localhost (iOS Simulator / Web browser / adb reverse)
  */
 export function getBaseUrls(): string[] {
   const urls: string[] = [];
 
-  // 1. Extract host IP dynamically from bundle URL
-  // e.g., "http://10.164.242.247:8081/index.bundle?platform=android..."
-  const scriptURL: string = NativeModules.SourceCode?.scriptURL || '';
-  const match = scriptURL.match(/^https?:\/\/([^:/]+)/);
-  const bundleHostIp = match ? match[1] : null;
-
-  if (bundleHostIp && bundleHostIp !== 'localhost' && bundleHostIp !== '127.0.0.1') {
-    urls.push(`http://${bundleHostIp}:8080/shifts`);
+  // 1. Explicit environment variable if configured
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    urls.push(envUrl.endsWith('/shifts') ? envUrl : `${envUrl}/shifts`);
   }
 
-  // 2. Direct laptop Wi-Fi / Hotspot LAN IP
-  urls.push(LAN_API_URL);
+  // 2. Dynamically resolved host IP from Metro bundle URL
+  const dynamicHostIp = getDynamicHostIp();
+  if (dynamicHostIp) {
+    urls.push(`http://${dynamicHostIp}:8080/shifts`);
+  }
 
-  // 3. Android Emulator loopback alias
+  // 3. Android Emulator loopback alias (maps emulator to host machine port 8080)
   if (Platform.OS === 'android') {
     urls.push('http://10.0.2.2:8080/shifts');
   }
 
-  // 4. Localhost (adb reverse, Web, iOS Simulator)
-  urls.push('http://localhost:8080/shifts');
+  // 4. Localhost (standard for iOS Simulator, Web, or adb reverse)
+  urls.push(DEFAULT_API_URL);
 
-  // Filter out any undefined or empty values
-  return Array.from(new Set(urls.filter((u) => typeof u === 'string' && u.length > 0)));
+  // Return deduplicated list of valid non-empty URLs
+  return Array.from(new Set(urls.filter((u): u is string => typeof u === 'string' && u.length > 0)));
 }
+
+// Backward-compatible exports
+export const PRIMARY_URL = DEFAULT_API_URL;
+export const FALLBACK_URL = Platform.select({
+  android: 'http://10.0.2.2:8080/shifts',
+  default: DEFAULT_API_URL,
+});

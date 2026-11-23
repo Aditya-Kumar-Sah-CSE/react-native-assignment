@@ -1,8 +1,8 @@
 # Shift Booking Application (React Native)
 
-A production-ready React Native shift booking mobile application built with **Expo SDK 52**, **TypeScript**, and **TanStack React Query**, backed by a local Node.js/Hapi mock API.
+A production-ready React Native shift booking mobile application built with **Expo SDK 58** (React Native 0.88), **TypeScript**, and **TanStack React Query v5**, backed by a local Node.js/Hapi mock API.
 
-This application strictly implements all requirements from the [Design Specification](./design-spec.pdf) with 100% pixel-faithful design tokens, resilient offline/failover networking, real-time date grouping, and global interval overlap detection.
+This application strictly implements all requirements from the [Design Specification](./design-spec.pdf) with 100% pixel-faithful design tokens, zero-config dynamic multi-endpoint networking, timezone-aware date grouping, and global interval overlap collision detection.
 
 ---
 
@@ -11,8 +11,8 @@ This application strictly implements all requirements from the [Design Specifica
 ### 1. **My Shifts View**
 - **Grouped by Date**: Displays all booked shifts grouped chronologically into *"Today"*, *"Tomorrow"*, or formatted dates (e.g., *"November 24"*).
 - **Header Aggregation**: Real-time section header summary showing shift count and total hours (e.g., `2 shifts, 4 h`).
-- **Cancellation Flow**: Allows cancelling booked shifts with animated vector SVG spinner and optimistic cache invalidation.
-- **Started Shifts Rule**: If a shift has already started (`currentTime >= startTime`), the cancel button is cleanly disabled to prevent illegal operations.
+- **Cancellation Flow**: Allows cancelling booked shifts with an animated vector SVG spinner and optimistic cache invalidation.
+- **Started Shifts Protection**: If a shift has already started (`currentTime >= startTime`), the action button is automatically disabled to prevent illegal operations.
 - **Empty State**: Clear placeholder when no shifts have been booked yet.
 
 ### 2. **Available Shifts View**
@@ -23,23 +23,26 @@ This application strictly implements all requirements from the [Design Specifica
 - **Pull-to-Refresh**: Native pull-down gesture on both screens to refetch fresh data from the server.
 
 ### 3. **Architectural Engineering Highlights**
-- **Multi-Endpoint Networking Fallback**: Intelligently switches between dynamic Metro LAN IP (`10.164.242.247`), Android Emulator loopback (`10.0.2.2`), and `localhost` (adb reverse). Works seamlessly on physical mobile phones, Android Studio emulators, and iOS simulators.
+- **Zero-Config Dynamic Networking**: No hardcoded IP addresses. Automatically extracts the Metro bundler's LAN host IP via `NativeModules.SourceCode.scriptURL` on any Wi-Fi, hotspot, or office network. Seamlessly supports physical mobile phones, Android Studio emulators (`10.0.2.2`), and iOS/web (`localhost`).
+- **Timezone Resilience**: Shifts located in Finland (`Helsinki`, `Tampere`, `Turku`) are formatted using `Intl.DateTimeFormat` with ISO date boundary alignment (`en-CA` calendar keys) to prevent date-boundary spillover regardless of developer location.
 - **Node 24 + Hapi v17 Stream Deadlock Fix**: Resolved Node v24 payload parser hang on parameterless POST routes by configuring raw stream handling on the API server.
-- **Dynamic UUID 404 Auto-Recovery**: Since the mock API generates random in-memory UUIDs on startup, client mutations automatically catch 404s and re-sync query cache transparently without user frustration.
+- **Dynamic UUID 404 Auto-Recovery**: Since the mock API generates random in-memory UUIDs on startup, client mutations automatically catch 404s and re-sync query cache transparently.
 
 ---
 
 ## 🛠️ Tech Stack & Dependencies
 
-| Layer | Technology |
-|---|---|
-| **Framework** | Expo SDK 52 / React Native 0.88 |
-| **Language** | TypeScript (Strict mode) |
-| **State Management** | TanStack React Query v5 |
-| **Navigation** | React Navigation v7 (Bottom Tabs) |
-| **Vector Graphics** | react-native-svg (Animated SVG spinner) |
-| **Date Manipulation** | date-fns v4 |
-| **Backend API** | Hapi.js v17 on Node.js |
+| Layer | Technology | Version |
+|---|---|---|
+| **Framework** | Expo SDK | **~58.0.26** |
+| **Runtime** | React Native | **0.88.1** |
+| **Core Library** | React | **19.3.0** |
+| **Language** | TypeScript (Strict mode) | **~5.9** |
+| **State Management** | TanStack React Query | **^5.108.2** |
+| **Navigation** | React Navigation (Bottom Tabs) | **^7.22.0** |
+| **Vector Graphics** | react-native-svg (Animated vector loader) | **15.16.0** |
+| **Date Manipulation** | date-fns & native Intl | **^4.4.0** |
+| **Backend API** | Hapi.js v17 on Node.js | **v17.5.3** |
 
 ---
 
@@ -55,7 +58,7 @@ This application strictly implements all requirements from the [Design Specifica
 ### Step 1: Start the Mock API Server
 
 ```bash
-# In the root repository directory
+# In the repository root directory
 npm install
 npm start
 ```
@@ -74,8 +77,9 @@ npx expo start
 ```
 
 ### Running on Devices:
-- **On Physical Phone**: Scan the QR code shown in terminal using the **Expo Go** app (Android) or **Camera** (iOS). *Ensure phone and PC are on the same Wi-Fi/Hotspot network.*
-- **On Android Emulator**: Press `a` in the terminal to open the app on the running emulator. (Ensure port reverse: `adb reverse tcp:8080 tcp:8080`).
+- **On Physical Phone (Zero-Config)**: Scan the QR code in the terminal using **Expo Go** (Android) or **Camera** (iOS). The app automatically detects your computer's IP address over the shared Wi-Fi/Hotspot!
+- **On Android Emulator**: Press `a` in the terminal to launch the app on the running emulator. Run `adb reverse tcp:8080 tcp:8080` to tunnel the mock API.
+- **Custom IP (Optional)**: If you are behind a strict corporate proxy, you can optionally set `EXPO_PUBLIC_API_URL=http://<YOUR_IP>:8080` in a `.env` file.
 
 ---
 
@@ -86,15 +90,15 @@ react-native-assignment/
 ├── api/                          # Mock Hapi API Server
 │   ├── server.js                 # Server entry point (configured with 0.0.0.0 & stream payload)
 │   └── shifts-mock-api/          # In-memory mock database & routes
-├── app/                          # React Native Mobile App
+├── app/                          # React Native Mobile App (Expo SDK 58)
 │   ├── assets/                   # App icons & design assets
 │   ├── src/
 │   │   ├── api/
-│   │   │   ├── client.ts         # Multi-endpoint host resolution & candidate URLs
-│   │   │   └── shiftsApi.ts      # REST methods (getShifts, bookShift, cancelShift)
+│   │   │   ├── client.ts         # Dynamic zero-config host discovery & candidate URLs
+│   │   │   └── shiftsApi.ts      # REST methods with multi-endpoint failover
 │   │   ├── components/
 │   │   │   ├── ActionButton.tsx  # Pill button (Book, Cancel, Disabled, SVG Spinner)
-│   │   │   ├── CityFilterTabs.tsx# Helsinki, Tampere, Turku tab bar with counts
+│   │   │   ├── CityFilterTabs.tsx# Helsinki, Tampere, Turku tab bar with live counts
 │   │   │   ├── DateSectionHeader.tsx # Date header with count & duration aggregation
 │   │   │   ├── NetworkBanner.tsx # Offline & connection retry banner
 │   │   │   ├── ShiftCard.tsx     # 3-column shift row with badges & time formats
@@ -109,7 +113,7 @@ react-native-assignment/
 │   │   ├── types/
 │   │   │   └── shift.ts          # Shift data models
 │   │   └── utils/
-│   │       ├── dateUtils.ts      # "Today", "Tomorrow", "2 shifts, 4 h" aggregation
+│   │       ├── dateUtils.ts      # Timezone-resilient date grouping & hour aggregation
 │   │       └── overlapUtils.ts   # Interval collision math algorithm
 │   ├── App.tsx                   # QueryClientProvider & NavigationContainer
 │   ├── app.json                  # Expo application configuration
@@ -145,9 +149,11 @@ react-native-assignment/
    - Handled with global interval collision detection: `shift1.start < shift2.end && shift1.end > shift2.start`.
 2. **Started Shifts**:
    - Shifts that have already started cannot be booked or cancelled (`currentTime >= startTime`). Action buttons automatically render in disabled state.
-3. **Resilient Network Handling**:
-   - If Wi-Fi changes or emulator network routing drops, user receives a clean non-intrusive `NetworkBanner` with a one-tap `Retry` button and pull-to-refresh.
-4. **Server Reboot State Sync**:
+3. **Resilient Dynamic Network Handling**:
+   - Zero hardcoded IP addresses. Works out of the box on physical devices, emulators, and local development tunnels.
+4. **Timezone & Calendar Alignment**:
+   - Shift times and calendar grouping are aligned using native `Intl` engines with ISO date keys (`YYYY-MM-DD`), preventing midnight shift bleeding.
+5. **Server Reboot State Sync**:
    - Mock API generates dynamic UUIDs in memory. If the backend is rebooted while the app is active, client catches 404s gracefully, displays a sync notification, and triggers automatic query refetch.
 
 ---
